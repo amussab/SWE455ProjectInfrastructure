@@ -3,7 +3,6 @@
 # ---------------------------
 resource "aws_s3_bucket" "uploads" {
   bucket = "${var.project_name}-uploads-${var.environment}"
-
   force_destroy = true
 }
 
@@ -12,7 +11,6 @@ resource "aws_s3_bucket" "uploads" {
 # ---------------------------
 resource "aws_s3_bucket" "artifacts" {
   bucket = var.artifact_bucket
-
   force_destroy = true
 }
 
@@ -42,39 +40,77 @@ resource "aws_iam_role" "lambda_role" {
 }
 
 # ---------------------------
-# Attach Basic Execution Policy
+# IAM Policies for Lambda
 # ---------------------------
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "lambda_s3" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_sqs" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+}
+
 # ---------------------------
-# Upload Lambda (from S3 artifact)
+# Upload artifacts to S3 (AUTOMATION)
+# ---------------------------
+resource "aws_s3_object" "upload_zip" {
+  bucket = aws_s3_bucket.artifacts.id
+  key    = "upload.zip"
+  source = "upload.zip"
+}
+
+resource "aws_s3_object" "validator_zip" {
+  bucket = aws_s3_bucket.artifacts.id
+  key    = "validator.zip"
+  source = "validator.zip"
+}
+
+# ---------------------------
+# DynamoDB Table (Validation Results)
+# ---------------------------
+resource "aws_dynamodb_table" "validation_table" {
+  name         = "file-validation-results"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "file_id"
+
+  attribute {
+    name = "file_id"
+    type = "S"
+  }
+}
+
+# ---------------------------
+# Upload Lambda
 # ---------------------------
 resource "aws_lambda_function" "upload_lambda" {
   function_name = "upload-service"
   role          = aws_iam_role.lambda_role.arn
   handler       = "index.handler"
   runtime       = "python3.10"
-  timeout       = 30
 
   s3_bucket = aws_s3_bucket.artifacts.id
   s3_key    = "upload.zip"
-  source_code_hash = filebase64sha256("upload.zip")
+
+  depends_on = [aws_s3_object.upload_zip]
 
   environment {
     variables = {
-      API_KEY             = var.api_key
-      ADMIN_API_KEY       = var.admin_api_key
-      APP_ENV             = var.environment
-      LOG_LEVEL           = "INFO"
-      UPLOAD_BUCKET_NAME  = aws_s3_bucket.uploads.id
-      UPLOADS_TABLE_NAME  = aws_dynamodb_table.validation_table.name
+      ENV         = "production"
+      BUCKET_NAME = aws_s3_bucket.uploads.bucket
     }
   }
-
-  depends_on = [aws_s3_object.upload_zip]
 }
 
 # ---------------------------
@@ -85,21 +121,19 @@ resource "aws_lambda_function" "validator_lambda" {
   role          = aws_iam_role.lambda_role.arn
   handler       = "index.handler"
   runtime       = "python3.10"
-  timeout       = 30
 
   s3_bucket = aws_s3_bucket.artifacts.id
   s3_key    = "validator.zip"
-  source_code_hash = filebase64sha256("validator.zip")
+
+  depends_on = [aws_s3_object.validator_zip]
 
   environment {
     variables = {
-      LOG_LEVEL           = "INFO"
-      MAX_FILE_SIZE_BYTES = var.max_file_size_bytes
-      UPLOADS_TABLE_NAME  = aws_dynamodb_table.validation_table.name
+      ENV        = "production"
+      QUEUE_NAME = aws_sqs_queue.validation_queue.name
+      TABLE_NAME = aws_dynamodb_table.validation_table.name
     }
   }
-
-  depends_on = [aws_s3_object.validator_zip]
 }
 
 # ---------------------------
@@ -134,8 +168,6 @@ resource "aws_s3_bucket_notification" "s3_to_sqs" {
     queue_arn = aws_sqs_queue.validation_queue.arn
     events    = ["s3:ObjectCreated:*"]
   }
-
-  depends_on = [aws_sqs_queue_policy.allow_s3]
 }
 
 # ---------------------------
@@ -155,14 +187,6 @@ resource "aws_apigatewayv2_api" "api" {
 }
 
 # ---------------------------
-# Attach SQS Access
-# ---------------------------
-resource "aws_iam_role_policy_attachment" "lambda_sqs" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
-}
-
-# ---------------------------
 # API Gateway Integration
 # ---------------------------
 resource "aws_apigatewayv2_integration" "upload_integration" {
@@ -178,7 +202,7 @@ resource "aws_apigatewayv2_integration" "upload_integration" {
 # ---------------------------
 resource "aws_apigatewayv2_route" "upload_route" {
   api_id    = aws_apigatewayv2_api.api.id
-  route_key = "$default"
+  route_key = "POST /upload"
   target    = "integrations/${aws_apigatewayv2_integration.upload_integration.id}"
 }
 
@@ -201,46 +225,4 @@ resource "aws_lambda_permission" "api_gateway" {
   principal     = "apigateway.amazonaws.com"
 
   source_arn = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
-}
-
-# ---------------------------
-# IAM Policy: Lambda → S3 Access
-# ---------------------------
-resource "aws_iam_role_policy_attachment" "lambda_s3" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-
-# ---------------------------
-# Upload artifacts to S3 (AUTOMATION)
-# ---------------------------
-resource "aws_s3_object" "upload_zip" {
-  bucket = aws_s3_bucket.artifacts.id
-  key    = "upload.zip"
-  source = "upload.zip"
-  etag   = filemd5("upload.zip")
-}
-
-resource "aws_s3_object" "validator_zip" {
-  bucket = aws_s3_bucket.artifacts.id
-  key    = "validator.zip"
-  source = "validator.zip"
-  etag   = filemd5("validator.zip")
-}
-# ---------------------------
-# DynamoDB Table (Validation Results)
-# ---------------------------
-resource "aws_dynamodb_table" "validation_table" {
-  name         = "file-validation-results"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "file_id"
-
-  attribute {
-    name = "file_id"
-    type = "S"
-  }
-}
-resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
 }
