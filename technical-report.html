@@ -702,6 +702,203 @@ infrastructure:      a6902e9 Wire Lambda services to S3 and DynamoDB</pre>
         required AI prompt appendix if the instructor requests complete prompt files.
       </p>
     </section>
+    <section class="section" id="doctor-requirements-addendum">
+      <h2>Doctor Requirements Addendum</h2>
+      <p>
+        This section maps the current repositories directly to the project brief in
+        <code>courseProject.md</code>. It is included to make the grading evidence
+        explicit during the live demonstration and report review.
+      </p>
+
+      <h3>Requirement Compliance Matrix</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Requirement</th>
+            <th>Current Implementation</th>
+            <th>Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>At least two functional services</td>
+            <td>Upload Service and Validator Service.</td>
+            <td><code>SWE455-upload-service</code> and <code>SWE455-validator-service</code>.</td>
+          </tr>
+          <tr>
+            <td>At least one data storage service</td>
+            <td>DynamoDB stores upload and validation records. S3 stores uploaded file objects.</td>
+            <td><code>aws_dynamodb_table.validation_table</code> and <code>aws_s3_bucket.uploads</code>.</td>
+          </tr>
+          <tr>
+            <td>All cloud components provisioned with Terraform</td>
+            <td>Terraform provisions S3, SQS, DynamoDB, Lambda, IAM, API Gateway, event notifications, and integrations.</td>
+            <td><code>SWE455ProjectInfrastructure/main.tf</code>.</td>
+          </tr>
+          <tr>
+            <td>Complete CI/CD pipeline</td>
+            <td>Service workflows build Lambda artifacts, upload them to S3, and update Lambda code on push.</td>
+            <td><code>.github/workflows/deploy.yml</code> in upload and validator repos.</td>
+          </tr>
+          <tr>
+            <td>15-Factor explanation</td>
+            <td>The report includes a full 15-Factor mapping table.</td>
+            <td>Section: <code>15-Factor Application Mapping</code>.</td>
+          </tr>
+          <tr>
+            <td>Delete and restore environment using code/scripts</td>
+            <td>Use <code>terraform destroy</code>, <code>build-artifacts.ps1</code>, and <code>terraform apply</code>.</td>
+            <td>Infrastructure repo and artifact build script.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Current Service Contract</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Contract</th>
+            <th>Important Runtime Config</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Upload Lambda</td>
+            <td>Receives HTTP requests from API Gateway and writes the file to S3 plus a <code>PENDING</code> record to DynamoDB.</td>
+            <td><code>API_KEY</code>, <code>ADMIN_API_KEY</code>, <code>UPLOAD_BUCKET_NAME</code>, <code>UPLOADS_TABLE_NAME</code>, <code>MAX_UPLOAD_BYTES</code>.</td>
+          </tr>
+          <tr>
+            <td>S3 Upload Bucket</td>
+            <td>Stores raw file objects and emits object-created events to SQS.</td>
+            <td>Object metadata: <code>upload-id</code>, <code>user-id</code>, <code>original-filename</code>.</td>
+          </tr>
+          <tr>
+            <td>SQS Queue</td>
+            <td>Buffers validation work and invokes the validator Lambda through event source mapping.</td>
+            <td>Queue policy allows S3 to send messages from the upload bucket.</td>
+          </tr>
+          <tr>
+            <td>Validator Lambda</td>
+            <td>Reads S3 object, validates content, and updates the matching DynamoDB record.</td>
+            <td><code>UPLOADS_TABLE_NAME</code>, <code>MAX_FILE_SIZE_BYTES</code>, <code>LOG_LEVEL</code>.</td>
+          </tr>
+          <tr>
+            <td>DynamoDB</td>
+            <td>Single source of truth for user history, admin upload list, alerts, and validation status.</td>
+            <td>Table: <code>file-validation-results</code>; key: <code>file_id</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Why the Architecture Uses SQS</h3>
+      <p>
+        SQS is used to decouple the upload request from validation. The upload API can
+        return quickly after the file is stored and a pending record is created. The
+        validator can process files independently, retry failed messages, and scale
+        based on queue depth. This directly supports concurrency, disposability, and
+        backing-service separation in the 15-Factor methodology.
+      </p>
+
+      <h3>IAM Decisions</h3>
+      <p>
+        The current Terraform uses AWS-managed policies for S3, SQS, DynamoDB, and
+        Lambda execution. This keeps the course demo simple and reproducible. A
+        production hardening step would replace those broad policies with custom
+        least-privilege policies scoped to the exact upload bucket, queue, and
+        DynamoDB table.
+      </p>
+
+      <h3>Scaling and Failure Handling</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Concern</th>
+            <th>Design Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Upload traffic spikes</td>
+            <td>API Gateway and Lambda scale automatically for incoming HTTP requests.</td>
+          </tr>
+          <tr>
+            <td>Validation load</td>
+            <td>SQS buffers work and validator Lambda scales as messages arrive.</td>
+          </tr>
+          <tr>
+            <td>Validation failure</td>
+            <td>Unexpected processing errors raise from the validator so SQS can retry.</td>
+          </tr>
+          <tr>
+            <td>Rejected files</td>
+            <td>Rejected and suspicious files are stored as normal validation outcomes, not treated as Lambda crashes.</td>
+          </tr>
+          <tr>
+            <td>Logs and telemetry</td>
+            <td>Lambda writes to stdout/stderr, and CloudWatch stores runtime logs and metrics.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Restore Demo Runbook</h3>
+      <pre>cd Infrastructure\SWE455ProjectInfrastructure
+terraform destroy
+.\build-artifacts.ps1
+terraform init
+terraform apply
+$API_URL = terraform output -raw api_url
+curl.exe "$API_URL/health"</pre>
+
+      <h3>Functional Demo Runbook</h3>
+      <pre>curl.exe -X POST "$API_URL/files/upload?user_id=user-demo" `
+  -H "x-api-key: student-demo-key" `
+  -F "file=@C:\path\to\valid.pdf"
+
+curl.exe "$API_URL/files/&lt;file_id&gt;" -H "x-api-key: student-demo-key"
+curl.exe "$API_URL/admin/uploads" -H "x-admin-key: admin-demo-key"
+curl.exe "$API_URL/admin/alerts" -H "x-admin-key: admin-demo-key"</pre>
+
+      <h3>Required GitHub Secrets and Variables</h3>
+      <p>Configure these in both service repositories under <code>Settings -> Secrets and variables -> Actions</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Name</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Secret</td><td><code>AWS_ACCESS_KEY_ID</code></td><td>Team AWS access key.</td></tr>
+          <tr><td>Secret</td><td><code>AWS_SECRET_ACCESS_KEY</code></td><td>Team AWS secret key.</td></tr>
+          <tr><td>Variable</td><td><code>AWS_REGION</code></td><td><code>us-east-1</code></td></tr>
+          <tr><td>Variable</td><td><code>ARTIFACT_BUCKET</code></td><td><code>file-validation-artifacts-12345</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Current Local Verification</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>python -m pytest tests/ -q</code> in upload-service</td><td>17 tests passed.</td></tr>
+          <tr><td><code>python -m unittest discover -s tests</code> in validator-service</td><td>8 tests passed.</td></tr>
+          <tr><td><code>python -m py_compile</code> checks</td><td>Upload and validator Python files compile.</td></tr>
+          <tr><td><code>.\build-artifacts.ps1</code></td><td><code>upload.zip</code> and <code>validator.zip</code> generated successfully.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        Terraform and AWS CLI were not installed in the local shell used for this
+        preparation. The final team test must run <code>terraform validate</code>,
+        <code>terraform apply</code>, and the live AWS API tests on a configured machine.
+      </div>
+    </section>
   </main>
 </body>
 </html>
