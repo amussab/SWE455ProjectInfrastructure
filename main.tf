@@ -200,3 +200,20 @@ resource "aws_s3_object" "validator_zip" {
   key    = "validator.zip"
   source = "validator.zip"
 }
+# ---------------------------
+# DynamoDB Table (Validation Results)
+# ---------------------------
+resource "aws_dynamodb_table" "validation_table" {
+  name         = "file-validation-results"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "file_id"
+
+  attribute {
+    name = "file_id"
+    type = "S"
+  }
+}
+resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+}
