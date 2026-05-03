@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Secure File Validation Service - Technical Report</title>
+  <style>
+    :root {
+      --ink: #050505;
+      --muted: #4a4a4a;
+      --line: #111;
+      --soft-line: #d7d7d7;
+      --paper: #fff;
+      --shade: #f3f3f3;
+      --wide: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Aptos", "Segoe UI", Tahoma, sans-serif;
+      font-size: 16px;
+      line-height: 1.58;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .page {
+      max-width: var(--wide);
+      margin: 0 auto;
+      padding: 44px 28px 72px;
+    }
+
+    .cover {
+      min-height: 88vh;
+      display: grid;
+      align-content: space-between;
+      border: 2px solid var(--line);
+      padding: 38px;
+      margin-bottom: 42px;
+    }
+
+    .kicker {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 900px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(46px, 8vw, 104px);
+      font-weight: 700;
+      margin-top: 34px;
+    }
+
+    h2 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 34px;
+      padding-top: 28px;
+      margin-bottom: 18px;
+      border-top: 2px solid var(--line);
+    }
+
+    h3 {
+      font-size: 18px;
+      margin: 24px 0 10px;
+      text-transform: uppercase;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    .cover-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      border-top: 2px solid var(--line);
+      padding-top: 24px;
+      margin-top: 42px;
+    }
+
+    .meta-box {
+      border-left: 6px solid var(--line);
+      padding-left: 16px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .section {
+      margin: 34px 0 46px;
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: block;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .toc a:hover {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      padding: 18px;
+      min-height: 100%;
+    }
+
+    .panel strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 15px;
+      text-transform: uppercase;
+    }
+
+    .diagram {
+      border: 2px solid var(--line);
+      padding: 24px;
+      overflow-x: auto;
+      background:
+        linear-gradient(90deg, transparent 23px, var(--soft-line) 24px, transparent 25px),
+        linear-gradient(transparent 23px, var(--soft-line) 24px, transparent 25px);
+      background-size: 24px 24px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      align-items: center;
+      gap: 10px;
+      min-width: 920px;
+    }
+
+    .node {
+      background: var(--paper);
+      border: 2px solid var(--line);
+      padding: 14px 10px;
+      min-height: 74px;
+      display: grid;
+      align-items: center;
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .arrow {
+      text-align: center;
+      font-weight: 900;
+      font-size: 22px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 24px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--ink);
+      color: var(--paper);
+      text-align: left;
+    }
+
+    code,
+    pre {
+      font-family: "Cascadia Mono", "Consolas", monospace;
+      font-size: 14px;
+    }
+
+    code {
+      background: var(--shade);
+      padding: 1px 5px;
+      border: 1px solid var(--soft-line);
+    }
+
+    pre {
+      background: var(--ink);
+      color: var(--paper);
+      padding: 16px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      border: 1px solid var(--line);
+    }
+
+    .badge {
+      display: inline-block;
+      border: 1px solid var(--line);
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .note {
+      border-left: 8px solid var(--line);
+      background: var(--shade);
+      padding: 16px;
+      margin: 18px 0;
+    }
+
+    .repo-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .repo-list li {
+      border-bottom: 1px solid var(--soft-line);
+      padding: 10px 0;
+    }
+
+    .small {
+      font-size: 14px;
+    }
+
+    @media (max-width: 820px) {
+      .page {
+        padding: 20px 14px 48px;
+      }
+
+      .cover {
+        min-height: auto;
+        padding: 22px;
+      }
+
+      .cover-grid,
+      .grid-2,
+      .grid-3,
+      .toc {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 48px;
+      }
+    }
+
+    @media print {
+      body {
+        font-size: 12px;
+      }
+
+      .page {
+        max-width: none;
+        padding: 0;
+      }
+
+      .cover {
+        min-height: 96vh;
+        page-break-after: always;
+      }
+
+      .section {
+        break-inside: avoid;
+      }
+
+      a {
+        text-decoration: none;
+      }
+
+      pre {
+        white-space: pre-wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="cover">
+      <div>
+        <div class="kicker">SWE455 Cloud Applications Engineering</div>
+        <h1>Secure File Validation Service</h1>
+        <p class="muted" style="max-width: 720px; margin-top: 24px;">
+          Technical report for a serverless backend that accepts user file uploads,
+          stores files in S3, queues validation through SQS, validates file safety in
+          a separate Lambda service, and records results in DynamoDB.
+        </p>
+      </div>
+      <div class="cover-grid">
+        <div class="meta-box">
+          <strong>Architecture</strong>
+          <p>API Gateway, Upload Lambda, S3, SQS, Validator Lambda, DynamoDB, CloudWatch.</p>
+        </div>
+        <div class="meta-box">
+          <strong>Repositories</strong>
+          <p>Infrastructure, upload-service, validator-service.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="contents">
+      <h2>Contents</h2>
+      <ul class="toc">
+        <li><a href="#summary">1. Executive Summary</a></li>
+        <li><a href="#architecture">2. Architecture</a></li>
+        <li><a href="#services">3. Services</a></li>
+        <li><a href="#data">4. Data Model</a></li>
+        <li><a href="#api">5. REST API</a></li>
+        <li><a href="#terraform">6. Terraform & Deployment</a></li>
+        <li><a href="#cicd">7. CI/CD</a></li>
+        <li><a href="#factors">8. 15-Factor Mapping</a></li>
+        <li><a href="#demo">9. Demo Plan</a></li>
+        <li><a href="#testing">10. Testing</a></li>
+        <li><a href="#repos">11. Source Repositories</a></li>
+        <li><a href="#appendix">12. AI Appendix</a></li>
+      </ul>
+    </section>
+
+    <section class="section" id="summary">
+      <h2>Executive Summary</h2>
+      <p>
+        The project implements a Secure File Validation Service. The business logic
+        is intentionally focused: users upload files, the system checks whether the
+        file type is safe and consistent with its content, then stores a result that
+        users and admins can query.
+      </p>
+      <p>
+        The architecture satisfies the course requirement of at least two functional
+        services and one data storage service. The two functional services are the
+        Upload Service and Validator Service. The storage layer is DynamoDB for
+        upload records and S3 for uploaded file objects. SQS decouples upload from
+        validation so validation can run asynchronously.
+      </p>
+      <div>
+        <span class="badge">Serverless</span>
+        <span class="badge">Terraform</span>
+        <span class="badge">CI/CD</span>
+        <span class="badge">API First</span>
+        <span class="badge">15-Factor</span>
+      </div>
+    </section>
+
+    <section class="section" id="architecture">
+      <h2>Architecture</h2>
+      <div class="diagram" aria-label="System architecture flow diagram">
+        <div class="flow">
+          <div class="node">Client</div>
+          <div class="arrow">-&gt;</div>
+          <div class="node">API Gateway</div>
+          <div class="arrow">-&gt;</div>
+          <div class="node">Upload Lambda</div>
+          <div class="arrow">-&gt;</div>
+          <div class="node">S3 Upload Bucket</div>
+        </div>
+        <div class="flow" style="margin-top: 18px;">
+          <div class="node">S3 Event</div>
+          <div class="arrow">-&gt;</div>
+          <div class="node">SQS Queue</div>
+          <div class="arrow">-&gt;</div>
+          <div class="node">Validator Lambda</div>
+          <div class="arrow">-&gt;</div>
+          <div class="node">DynamoDB Results</div>
+        </div>
+      </div>
+
+      <h3>Runtime Flow</h3>
+      <ol>
+        <li>Client sends a multipart file request to API Gateway.</li>
+        <li>API Gateway invokes the Upload Lambda.</li>
+        <li>Upload Lambda stores the file in S3 and creates a <code>PENDING</code> record in DynamoDB.</li>
+        <li>S3 emits an object-created event to SQS.</li>
+        <li>SQS invokes the Validator Lambda.</li>
+        <li>Validator Lambda reads the S3 object, validates the file, and updates DynamoDB.</li>
+        <li>User/admin APIs read the latest status from DynamoDB.</li>
+      </ol>
+    </section>
+
+    <section class="section" id="services">
+      <h2>Services</h2>
+      <div class="grid-2">
+        <div class="panel">
+          <strong>Upload Service</strong>
+          <p>Repository: <code>SWE455-upload-service</code></p>
+          <p>Cloud entrypoint: <code>index.handler</code></p>
+          <p>
+            Accepts authenticated upload requests, parses multipart content,
+            writes file objects to S3, and creates initial DynamoDB records.
+          </p>
+        </div>
+        <div class="panel">
+          <strong>Validator Service</strong>
+          <p>Repository: <code>SWE455-validator-service</code></p>
+          <p>Cloud entrypoint: <code>index.handler</code></p>
+          <p>
+            Processes SQS messages from S3, checks file extension, size, MIME,
+            magic bytes, executable spoofing, and CSV structure, then updates DynamoDB.
+          </p>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top: 18px;">
+        <div class="panel">
+          <strong>S3</strong>
+          <p>Stores uploaded files and emits object-created events.</p>
+        </div>
+        <div class="panel">
+          <strong>SQS</strong>
+          <p>Buffers validation work and decouples upload latency from validation processing.</p>
+        </div>
+        <div class="panel">
+          <strong>DynamoDB</strong>
+          <p>Stores upload status, metadata, validation result, and rejection reason.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="data">
+      <h2>Data Model</h2>
+      <p>DynamoDB table: <code>file-validation-results</code></p>
+      <p>Partition key: <code>file_id</code></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>file_id</code></td><td>Primary identifier for the upload record.</td></tr>
+          <tr><td><code>upload_id</code></td><td>Alias used by service logic and S3 metadata.</td></tr>
+          <tr><td><code>user_id</code></td><td>Caller or uploader identifier.</td></tr>
+          <tr><td><code>filename</code></td><td>Original uploaded file name.</td></tr>
+          <tr><td><code>s3_bucket</code>, <code>s3_key</code></td><td>Location of the uploaded file object.</td></tr>
+          <tr><td><code>status</code></td><td><code>PENDING</code>, <code>ACCEPTED</code>, <code>REJECTED</code>, or <code>SUSPICIOUS</code>.</td></tr>
+          <tr><td><code>size_bytes</code></td><td>Uploaded file size.</td></tr>
+          <tr><td><code>reason</code></td><td>Validation explanation or rejection reason.</td></tr>
+          <tr><td><code>detected_type</code></td><td>Content type detected by magic bytes/content checks.</td></tr>
+          <tr><td><code>uploaded_at</code>, <code>validated_at</code></td><td>Lifecycle timestamps.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="api">
+      <h2>REST API</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Auth</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>POST</td><td><code>/files/upload</code></td><td><code>x-api-key</code></td><td>Upload a file for validation.</td></tr>
+          <tr><td>GET</td><td><code>/files/{file_id}</code></td><td><code>x-api-key</code></td><td>Get validation result for one file.</td></tr>
+          <tr><td>GET</td><td><code>/files</code></td><td><code>x-api-key</code></td><td>List upload history, optionally filtered by user.</td></tr>
+          <tr><td>GET</td><td><code>/admin/uploads</code></td><td><code>x-admin-key</code></td><td>Admin list of uploads.</td></tr>
+          <tr><td>GET</td><td><code>/admin/alerts</code></td><td><code>x-admin-key</code></td><td>Admin list of suspicious uploads.</td></tr>
+          <tr><td>GET</td><td><code>/health</code></td><td>None</td><td>Liveness check.</td></tr>
+          <tr><td>GET</td><td><code>/ready</code></td><td>None</td><td>Readiness check.</td></tr>
+          <tr><td>GET</td><td><code>/metrics</code></td><td>None</td><td>Runtime counters.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Upload Example</h3>
+      <pre>curl.exe -X POST "$API_URL/files/upload?user_id=user-demo" `
+  -H "x-api-key: student-demo-key" `
+  -F "file=@C:\path\to\test.pdf"</pre>
+
+      <h3>Upload Response</h3>
+      <pre>{
+  "file_id": "43708731-35eb-4a61-8cc5-664aa68cc0b2",
+  "status": "pending",
+  "message": "File received and queued for validation.",
+  "filename": "test.pdf",
+  "size_bytes": 204800,
+  "uploaded_at": "2026-05-03T18:52:43.613384+00:00"
+}</pre>
+    </section>
+
+    <section class="section" id="terraform">
+      <h2>Terraform & Deployment</h2>
+      <p>
+        Infrastructure is defined in <code>SWE455ProjectInfrastructure</code>. The
+        Terraform configuration provisions all cloud components required for the
+        system: S3, SQS, Lambda functions, API Gateway, DynamoDB, IAM roles, and
+        permissions.
+      </p>
+      <h3>Key Resources</h3>
+      <ul>
+        <li><code>aws_s3_bucket.uploads</code> for user files.</li>
+        <li><code>aws_s3_bucket.artifacts</code> for Lambda zip artifacts.</li>
+        <li><code>aws_sqs_queue.validation_queue</code> for asynchronous validation.</li>
+        <li><code>aws_lambda_function.upload_lambda</code>.</li>
+        <li><code>aws_lambda_function.validator_lambda</code>.</li>
+        <li><code>aws_dynamodb_table.validation_table</code>.</li>
+        <li><code>aws_apigatewayv2_api.api</code>.</li>
+      </ul>
+
+      <h3>Deployment Commands</h3>
+      <pre>cd Infrastructure\SWE455ProjectInfrastructure
+.\build-artifacts.ps1
+terraform init
+terraform apply
+terraform output api_url</pre>
+
+      <div class="note">
+        Terraform must be installed on the machine running these commands. During
+        local preparation, Terraform was not available in the shell, so Python tests
+        and artifact generation were verified locally, while Terraform validation must
+        be run in the deployment environment.
+      </div>
+    </section>
+
+    <section class="section" id="cicd">
+      <h2>CI/CD</h2>
+      <p>
+        The upload and validator service repositories include GitHub Actions workflows.
+        On push to <code>main</code>, each workflow tests/builds the service artifact,
+        uploads it to the artifact S3 bucket, and updates the corresponding Lambda
+        function.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Repository</th>
+            <th>Workflow</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>SWE455-upload-service</code></td><td><code>.github/workflows/deploy.yml</code></td><td>Run tests, build <code>upload.zip</code>, upload to S3, update Lambda.</td></tr>
+          <tr><td><code>SWE455-validator-service</code></td><td><code>.github/workflows/deploy.yml</code></td><td>Run tests, build <code>validator.zip</code>, upload to S3, update Lambda.</td></tr>
+        </tbody>
+      </table>
+      <h3>Required GitHub Settings</h3>
+      <pre>Repository -> Settings -> Secrets and variables -> Actions
+
+Secrets:
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+
+Variables:
+AWS_REGION=us-east-1
+ARTIFACT_BUCKET=file-validation-artifacts-12345</pre>
+    </section>
+
+    <section class="section" id="factors">
+      <h2>15-Factor Application Mapping</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Factor</th>
+            <th>How the Project Satisfies It</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1. Codebase</td><td>Separate GitHub repositories for infrastructure, upload service, and validator service.</td></tr>
+          <tr><td>2. Dependencies</td><td>Python dependencies are declared in <code>requirements.txt</code>; validator uses standard library plus AWS runtime boto3.</td></tr>
+          <tr><td>3. Config</td><td>Runtime configuration is passed through Lambda environment variables: bucket name, table name, API keys, size limit.</td></tr>
+          <tr><td>4. Backing Services</td><td>S3, SQS, DynamoDB, Lambda, and API Gateway are attached resources managed through Terraform.</td></tr>
+          <tr><td>5. Build, Release, Run</td><td>Build scripts create zip artifacts; Terraform releases infrastructure; Lambda runs immutable uploaded artifacts.</td></tr>
+          <tr><td>6. Processes</td><td>Lambdas are stateless processes. Durable state lives in S3 and DynamoDB.</td></tr>
+          <tr><td>7. Port Binding</td><td>API Gateway exposes HTTP routes. Lambda code does not require manually managed ports.</td></tr>
+          <tr><td>8. Concurrency</td><td>Lambda and SQS scale concurrent validation work automatically.</td></tr>
+          <tr><td>9. Disposability</td><td>Short-lived Lambda invocations start quickly and fail messages back to SQS for retry.</td></tr>
+          <tr><td>10. Dev/Prod Parity</td><td>Same Python service logic and zip artifacts are used for repeatable deployment.</td></tr>
+          <tr><td>11. Logs</td><td>Services log to stdout/stderr, collected by CloudWatch.</td></tr>
+          <tr><td>12. Admin Processes</td><td>Terraform scripts and artifact build scripts are used for setup, teardown, and deployment.</td></tr>
+          <tr><td>13. API First</td><td>REST endpoints and OpenAPI documentation are provided in the upload-service repository.</td></tr>
+          <tr><td>14. Telemetry</td><td>Health, readiness, metrics endpoints, Lambda logs, and AWS metrics support observability.</td></tr>
+          <tr><td>15. Authentication & Authorization</td><td>User endpoints require <code>x-api-key</code>; admin endpoints require <code>x-admin-key</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="demo">
+      <h2>Demo Plan</h2>
+      <ol>
+        <li>Run <code>terraform destroy</code> to remove the cloud environment.</li>
+        <li>Run <code>terraform apply</code> to recreate S3, SQS, Lambda, API Gateway, IAM, and DynamoDB.</li>
+        <li>Call <code>GET /health</code> to prove the API is alive.</li>
+        <li>Upload a valid PDF and show a DynamoDB result of <code>ACCEPTED</code>.</li>
+        <li>Upload an executable renamed to <code>.pdf</code> and show <code>SUSPICIOUS</code>.</li>
+        <li>Upload an oversized file and show rejection.</li>
+        <li>Open DynamoDB to show persisted upload history.</li>
+        <li>Open CloudWatch logs to show Upload Lambda and Validator Lambda execution.</li>
+        <li>Push a code change to show GitHub Actions build/deploy automation.</li>
+      </ol>
+
+      <h3>Validation Demo Files</h3>
+      <table>
+        <thead>
+          <tr><th>Case</th><th>Expected Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Valid PDF beginning with <code>%PDF-</code></td><td><code>ACCEPTED</code></td></tr>
+          <tr><td>Executable bytes <code>MZ</code> renamed as <code>report.pdf</code></td><td><code>SUSPICIOUS</code></td></tr>
+          <tr><td>Unsupported extension such as <code>.exe</code></td><td><code>REJECTED</code></td></tr>
+          <tr><td>CSV with inconsistent rows</td><td><code>REJECTED</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="testing">
+      <h2>Testing</h2>
+      <table>
+        <thead>
+          <tr><th>Test</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>python -m pytest tests/ -q</code> in upload-service</td><td>17 passed, 1 warning.</td></tr>
+          <tr><td><code>python -m unittest discover -s tests</code> in validator-service</td><td>8 passed.</td></tr>
+          <tr><td>Python compile checks</td><td>Passed for upload and validator services.</td></tr>
+          <tr><td><code>build-artifacts.ps1</code></td><td>Created <code>upload.zip</code> and <code>validator.zip</code>.</td></tr>
+          <tr><td>Simulated upload Lambda</td><td>Accepted multipart upload, wrote fake S3 object, wrote fake DynamoDB item, returned file status.</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        AWS CLI and Terraform were not installed in the local shell used during preparation.
+        Therefore, the final AWS deployment test must be run from a configured environment
+        before the live demonstration.
+      </div>
+    </section>
+
+    <section class="section" id="repos">
+      <h2>Source Repositories</h2>
+      <ul class="repo-list">
+        <li><strong>Infrastructure:</strong> <a href="https://github.com/amussab/SWE455ProjectInfrastructure">https://github.com/amussab/SWE455ProjectInfrastructure</a></li>
+        <li><strong>Upload Service:</strong> <a href="https://github.com/amussab/SWE455-upload-service">https://github.com/amussab/SWE455-upload-service</a></li>
+        <li><strong>Validator Service:</strong> <a href="https://github.com/amussab/SWE455-validator-service">https://github.com/amussab/SWE455-validator-service</a></li>
+      </ul>
+      <h3>Latest Pushed Commits</h3>
+      <pre>upload-service:      4545c12 Integrate upload service with serverless AWS flow
+validator-service:   58f0f54 Implement SQS validator Lambda service
+infrastructure:      a6902e9 Wire Lambda services to S3 and DynamoDB</pre>
+    </section>
+
+    <section class="section" id="appendix">
+      <h2>AI Appendix</h2>
+      <p>
+        AI assistance was used to analyze the project requirements, inspect repository
+        structure, implement the validator service, align the upload service with the
+        serverless infrastructure, create deployment workflows, and prepare this report.
+      </p>
+      <h3>Prompt Summary</h3>
+      <pre>1. Understand courseProject.md, infrastructure, and validator responsibility before changing code.
+2. Implement the validator service.
+3. Summarize missing judge/demo requirements.
+4. Inspect the pushed upload-service work and integrate necessary pieces.
+5. Commit and push changes with proper messages.
+6. Create a black-and-white HTML/CSS technical report based on the repositories.</pre>
+      <p class="small muted">
+        The team should include either this appendix or the full chat transcript as the
+        required AI prompt appendix if the instructor requests complete prompt files.
+      </p>
+    </section>
+  </main>
+</body>
+</html>
